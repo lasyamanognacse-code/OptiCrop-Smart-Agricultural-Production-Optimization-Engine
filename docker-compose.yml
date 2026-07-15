@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: opti_user
+      POSTGRES_PASSWORD: secure_pass
+      POSTGRES_DB: opticrop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.8.1
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://opti_user:secure_pass@postgres/opticrop --default-artifact-root s3://opticrop-models/artifacts
+
+  model-serving:
+    build: ./model_serving
+    ports:
+      - "8001:8001"
+    environment:
+      - MODEL_PATH=/app/artifacts/model.onnx
+      - SCALER_PATH=/app/artifacts/scaler.pkl
+    volumes:
+      - ./ml_pipeline/artifacts:/app/artifacts
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - model-serving
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379
+      - MODEL_SERVING_URL=http://model-serving:8001
+    volumes:
+      - ./backend/app:/app/app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

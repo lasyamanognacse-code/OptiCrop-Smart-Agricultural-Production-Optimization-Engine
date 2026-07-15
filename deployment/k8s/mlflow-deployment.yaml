@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: opticrop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: ghcr.io/mlflow/mlflow:v2.8.1
+        args:
+        - mlflow
+        - server
+        - --host=0.0.0.0
+        - --port=5000
+        - --backend-store-uri=postgresql://opti_user:secure_pass@postgres/opticrop
+        - --default-artifact-root=s3://opticrop-models/artifacts
+        env:
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: http://minio:9000
+        ports:
+        - containerPort: 5000
